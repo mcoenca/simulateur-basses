@@ -76,7 +76,17 @@
     border-radius: 4px;
     font-size: 12px;
     background: #fff;
+    min-width: 0;
   }
+  .row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .row select.grow { flex: 1; }
   .val { min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
   .hint { color: var(--muted); font-size: 11px; margin: 4px 0; line-height: 1.4; }
   button {
@@ -283,6 +293,18 @@
       <button data-preset="cardio">Cardioïde</button>
     </div>
     <div class="hint" id="presetInfo">Chaque configuration illustre un principe classique de mise en œuvre des subs.</div>
+
+    <h2>Sauvegardes</h2>
+    <div class="row">
+      <input type="text" id="cfgName" placeholder="nom de la configuration" maxlength="40">
+      <button id="saveCfg">Sauver</button>
+    </div>
+    <div class="row">
+      <select id="cfgSel" class="grow"></select>
+      <button id="loadCfg">Charger</button>
+      <button id="delCfg" title="Supprimer la configuration sélectionnée">&#10005;</button>
+    </div>
+    <div class="hint" id="cfgMsg">Configurations enregistrées dans ce navigateur (localStorage) : positions, délais, phases, puissances, filtres, grille et fréquence.</div>
   </div>
 </div>
 
@@ -472,13 +494,45 @@ function draw() {
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(off, 0, 0, pw, ph);
 
-  // quadrillage tous les 5 m
-  ctx.strokeStyle = "rgba(255,255,255,0.35)";
-  ctx.lineWidth = 1;
+  // quadrillage : lignes fines tous les 1 m, marquées tous les 5 m, échelles en mètres
+  const dpr = view.width / (parseFloat(view.style.width) || view.width);
+  if (scale >= 5) {
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 1; x < state.W; x++) if (x % 5) { ctx.moveTo(x * scale, 0); ctx.lineTo(x * scale, ph); }
+    for (let y = 1; y < state.H; y++) if (y % 5) { ctx.moveTo(0, y * scale); ctx.lineTo(pw, y * scale); }
+    ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(255,255,255,0.6)";
+  ctx.lineWidth = Math.max(1, Math.round(dpr));
   ctx.beginPath();
   for (let x = 5; x < state.W; x += 5) { ctx.moveTo(x * scale, 0); ctx.lineTo(x * scale, ph); }
   for (let y = 5; y < state.H; y += 5) { ctx.moveTo(0, y * scale); ctx.lineTo(pw, y * scale); }
   ctx.stroke();
+
+  // échelles : graduations en mètres le long des bords haut et gauche
+  const fs = Math.round(10 * dpr);
+  ctx.font = "600 " + fs + "px sans-serif";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = 3 * dpr;
+  ctx.strokeStyle = "rgba(0,0,0,0.5)";
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  for (let x = 5; x < state.W; x += 5) {
+    ctx.strokeText(String(x), x * scale, 3 * dpr);
+    ctx.fillText(String(x), x * scale, 3 * dpr);
+  }
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  for (let y = 5; y < state.H; y += 5) {
+    ctx.strokeText(String(y), 4 * dpr, y * scale);
+    ctx.fillText(String(y), 4 * dpr, y * scale);
+  }
+  ctx.textBaseline = "top";
+  ctx.strokeText("m", 4 * dpr, 3 * dpr);
+  ctx.fillText("m", 4 * dpr, 3 * dpr);
 
   // caissons
   const sz = clamp(view.width * 0.022, 16, 30);
@@ -611,6 +665,12 @@ function renderDetail() {
   };
 
   const i = state.selected;
+  const posTxt = () => s.x.toFixed(1) + " / " + s.y.toFixed(1);
+  const xInp = numInput(+s.x.toFixed(1), 0.3, state.W - 0.3, 0.1, v => { s.x = v; updateRowCell(i, "c-pos", posTxt()); requestDraw(); });
+  xInp.id = "detX";
+  const yInp = numInput(+s.y.toFixed(1), 0.3, state.H - 0.3, 0.1, v => { s.y = v; updateRowCell(i, "c-pos", posTxt()); requestDraw(); });
+  yInp.id = "detY";
+  row("x / y (m)", xInp, yInp);
   row("Délai (ms)", numInput(s.delay, 0, 50, 0.1, v => { s.delay = v; updateRowCell(i, "c-delay", v); requestDraw(); }));
   row("Phase (°)", numInput(s.phase, 0, 359, 5, v => { s.phase = v; requestDraw(); }));
   row("Puissance (W)", numInput(s.power, 50, 1000, 50, v => { s.power = v; updateRowCell(i, "c-power", v); requestDraw(); }));
@@ -691,6 +751,14 @@ function moveDrag(clientX, clientY) {
   s.x = clamp(m.x, 0.3, state.W - 0.3);
   s.y = clamp(m.y, 0.3, state.H - 0.3);
   updateRowCell(dragIdx, "c-pos", s.x.toFixed(1) + " / " + s.y.toFixed(1));
+  // suivi en direct : sonde sous la carte + champs x/y du panneau caisson
+  document.getElementById("probe").textContent =
+    "caisson " + (dragIdx + 1) + " : x " + s.x.toFixed(1) + " m, y " + s.y.toFixed(1) + " m";
+  if (state.selected === dragIdx) {
+    const dx = document.getElementById("detX"), dy = document.getElementById("detY");
+    if (dx) dx.value = s.x.toFixed(1);
+    if (dy) dy.value = s.y.toFixed(1);
+  }
   requestDraw();
 }
 
@@ -799,13 +867,13 @@ document.getElementById("gw").addEventListener("change", e => {
   state.W = clamp(parseFloat(e.target.value) || 30, 10, 80);
   e.target.value = state.W;
   state.sources.forEach(s => { s.x = clamp(s.x, 0.3, state.W - 0.3); });
-  layoutCanvas(); renderTable(); requestDraw();
+  layoutCanvas(); renderTable(); renderDetail(); requestDraw();
 });
 document.getElementById("gh").addEventListener("change", e => {
   state.H = clamp(parseFloat(e.target.value) || 20, 8, 60);
   e.target.value = state.H;
   state.sources.forEach(s => { s.y = clamp(s.y, 0.3, state.H - 0.3); });
-  layoutCanvas(); renderTable(); requestDraw();
+  layoutCanvas(); renderTable(); renderDetail(); requestDraw();
 });
 
 document.getElementById("addSrc").addEventListener("click", () => {
@@ -833,6 +901,95 @@ document.querySelectorAll("[data-preset]").forEach(btn => {
   });
 });
 
+/* ---------- sauvegardes localStorage ---------- */
+
+const LS_KEY = "simubasses-configs-v1";
+
+function readStore() {
+  try {
+    const o = JSON.parse(localStorage.getItem(LS_KEY));
+    return (o && typeof o === "object" && !Array.isArray(o)) ? o : {};
+  } catch (e) { return {}; }
+}
+function writeStore(o) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(o)); return true; }
+  catch (e) { return false; }
+}
+
+function cfgMsg(txt) { document.getElementById("cfgMsg").textContent = txt; }
+
+function refreshCfgList(select) {
+  const sel = document.getElementById("cfgSel");
+  const names = Object.keys(readStore()).sort((a, b) => a.localeCompare(b, "fr"));
+  sel.innerHTML = "";
+  names.forEach(n => {
+    const o = document.createElement("option");
+    o.value = n; o.textContent = n;
+    sel.appendChild(o);
+  });
+  if (select && names.includes(select)) sel.value = select;
+  sel.disabled = names.length === 0;
+}
+
+document.getElementById("saveCfg").addEventListener("click", () => {
+  let name = document.getElementById("cfgName").value.trim();
+  if (!name) {
+    const d = new Date();
+    name = "config " + d.toLocaleDateString("fr-FR") + " " +
+      String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  const store = readStore();
+  const existed = Object.prototype.hasOwnProperty.call(store, name);
+  store[name] = {
+    freq: state.freq,
+    W: state.W,
+    H: state.H,
+    sources: state.sources.map(s => ({ ...s })),
+  };
+  if (!writeStore(store)) { cfgMsg("Sauvegarde impossible (localStorage indisponible ou plein)."); return; }
+  refreshCfgList(name);
+  document.getElementById("cfgName").value = "";
+  cfgMsg("« " + name + " » " + (existed ? "mise à jour." : "sauvegardée."));
+});
+
+document.getElementById("loadCfg").addEventListener("click", () => {
+  const name = document.getElementById("cfgSel").value;
+  const cfg = readStore()[name];
+  if (!cfg) { cfgMsg("Aucune configuration à charger."); return; }
+  if (playing) setPlaying(false);
+  state.freq = clamp(parseInt(cfg.freq, 10) || 63, F_LO, F_HI);
+  state.W = clamp(parseFloat(cfg.W) || 30, 10, 80);
+  state.H = clamp(parseFloat(cfg.H) || 20, 8, 60);
+  state.sources = (Array.isArray(cfg.sources) && cfg.sources.length ? cfg.sources : [newSource(3, state.H / 2)])
+    .slice(0, 8)
+    .map(o => {
+      const s = Object.assign(newSource(3, state.H / 2), o);
+      s.x = clamp(s.x, 0.3, state.W - 0.3);
+      s.y = clamp(s.y, 0.3, state.H - 0.3);
+      return s;
+    });
+  state.selected = 0;
+  document.getElementById("freq").value = state.freq;
+  document.getElementById("gw").value = state.W;
+  document.getElementById("gh").value = state.H;
+  layoutCanvas();
+  updateFreqInfo();
+  renderTable();
+  renderDetail();
+  requestDraw();
+  cfgMsg("« " + name + " » chargée.");
+});
+
+document.getElementById("delCfg").addEventListener("click", () => {
+  const name = document.getElementById("cfgSel").value;
+  if (!name) { cfgMsg("Aucune configuration à supprimer."); return; }
+  const store = readStore();
+  delete store[name];
+  writeStore(store);
+  refreshCfgList();
+  cfgMsg("« " + name + " » supprimée.");
+});
+
 // relayout à la rotation / redimensionnement
 let resizeTimer = null;
 window.addEventListener("resize", () => {
@@ -848,6 +1005,7 @@ updateFreqInfo();
 drawLegend();
 renderTable();
 renderDetail();
+refreshCfgList();
 layoutCanvas();
 draw();
 </script>
