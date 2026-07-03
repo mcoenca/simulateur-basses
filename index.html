@@ -280,7 +280,7 @@
       </thead>
       <tbody id="srcRows"></tbody>
     </table>
-    <div class="hint">Glisser les caissons sur la carte (doigt ou souris). Cliquer une ligne pour éditer le caisson ci-dessous.</div>
+    <div class="hint">Glisser les caissons sur la carte (doigt ou souris). Double-clic ou double-tap sur un caisson pour le couper ou le réactiver. Cliquer une ligne pour éditer le caisson ci-dessous.</div>
 
     <div class="detail" id="detail"></div>
 
@@ -859,10 +859,27 @@ function endDrag() {
   view.classList.remove("dragging");
 }
 
+function toggleMute(idx) {
+  const s = state.sources[idx];
+  s.mute = !s.mute;
+  state.selected = idx;
+  dragIdx = -1;
+  view.classList.remove("dragging");
+  renderTable();
+  renderDetail();
+  requestDraw();
+}
+
 // souris
 view.addEventListener("mousedown", e => startDrag(e.clientX, e.clientY));
 window.addEventListener("mousemove", e => moveDrag(e.clientX, e.clientY));
 window.addEventListener("mouseup", endDrag);
+
+// double-clic sur un caisson : couper / réactiver
+view.addEventListener("dblclick", e => {
+  const idx = pickSource(clientToM(e.clientX, e.clientY));
+  if (idx >= 0) { e.preventDefault(); toggleMute(idx); }
+});
 
 // sonde au survol (souris uniquement)
 view.addEventListener("mousemove", e => {
@@ -876,8 +893,19 @@ view.addEventListener("mousemove", e => {
 });
 
 // tactile
+let lastTap = { t: -1e9, idx: -1 };
 view.addEventListener("touchstart", e => {
   const t = e.touches[0];
+  const idx = pickSource(clientToM(t.clientX, t.clientY));
+  const now = performance.now();
+  // double-tap sur un caisson : couper / réactiver
+  if (idx >= 0 && idx === lastTap.idx && now - lastTap.t < 320) {
+    e.preventDefault();
+    lastTap = { t: -1e9, idx: -1 };
+    toggleMute(idx);
+    return;
+  }
+  lastTap = { t: now, idx };
   if (startDrag(t.clientX, t.clientY)) e.preventDefault();
   else {
     // simple tap : afficher le niveau au point touché
