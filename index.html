@@ -40,7 +40,7 @@
     align-items: flex-start;
   }
   .panel {
-    width: 320px;
+    width: 330px;
     flex-shrink: 0;
     background: var(--panel);
     border: 1px solid var(--border);
@@ -62,7 +62,7 @@
     margin: 6px 0;
   }
   .row label { flex: 1; }
-  .row input[type="range"] { flex: 2; }
+  .row input[type="range"] { flex: 2; min-width: 0; }
   .row input[type="number"] {
     width: 62px;
     padding: 3px 4px;
@@ -70,7 +70,14 @@
     border-radius: 4px;
     font-size: 12px;
   }
-  .val { min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
+  .row select {
+    padding: 3px 4px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    background: #fff;
+  }
+  .val { min-width: 48px; text-align: right; font-variant-numeric: tabular-nums; }
   .hint { color: var(--muted); font-size: 11px; margin: 4px 0; line-height: 1.4; }
   button {
     padding: 6px 10px;
@@ -84,7 +91,42 @@
   button:hover { background: #f0f2f5; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button.primary:hover { background: #1d4ed8; }
-  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* zones de fréquence */
+  .zoneBar {
+    position: relative;
+    display: flex;
+    height: 12px;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 8px 0 2px 0;
+  }
+  .zoneBar div { height: 100%; }
+  #freqMarker {
+    position: absolute;
+    top: -2px;
+    width: 2px;
+    height: 16px;
+    background: #1c1e21;
+    border-radius: 1px;
+    transform: translateX(-1px);
+  }
+  .zoneLegend {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 10px;
+    font-size: 10.5px;
+    color: var(--muted);
+    margin: 4px 0 6px 0;
+  }
+  .zoneLegend b { color: var(--text); font-weight: 600; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: baseline; }
+  .cov { display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 10.5px; color: var(--muted); }
+  .covLab { width: 24px; font-weight: 600; color: var(--text); }
+  .covTrack { flex: 1; height: 6px; background: #edeef1; border-radius: 3px; position: relative; }
+  .covFill { position: absolute; top: 0; height: 100%; background: #9aa8c7; border-radius: 3px; }
+  .covHz { width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
+
   table.sources {
     width: 100%;
     border-collapse: collapse;
@@ -97,17 +139,11 @@
     padding: 2px 4px;
     font-size: 11px;
   }
-  table.sources td { padding: 3px 4px; }
-  table.sources tr.src { cursor: pointer; border-radius: 4px; }
+  table.sources td { padding: 4px; }
+  table.sources tr.src { cursor: pointer; }
   table.sources tr.src:hover td { background: #f0f4ff; }
   table.sources tr.src.sel td { background: #e0eaff; }
-  table.sources input[type="number"] {
-    width: 54px;
-    padding: 4px 3px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    font-size: 12px;
-  }
+  table.sources td.num { font-variant-numeric: tabular-nums; }
   .tag {
     display: inline-block;
     width: 18px; height: 18px;
@@ -119,16 +155,27 @@
     font-weight: 600;
     font-size: 11px;
   }
+  .tag.off { background: #9aa0a6; }
+  .detail {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    background: #fafbfc;
+  }
+  .detail .row { margin: 5px 0; }
+  .detail label { font-size: 12px; }
   .toggle {
     cursor: pointer;
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 3px 8px;
+    padding: 4px 9px;
     background: #fff;
     font-size: 11px;
     touch-action: manipulation;
   }
   .toggle.on { background: #1c1e21; color: #fff; border-color: #1c1e21; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
   .canvas-wrap {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -193,7 +240,14 @@
     <div class="row">
       <input type="range" id="freq" min="25" max="160" step="1" value="63">
       <span class="val" id="freqVal">63 Hz</span>
+      <button id="playBtn" title="Balayer automatiquement toute la plage">&#9654; Play</button>
     </div>
+    <div class="zoneBar" id="zoneBar"><div id="freqMarker"></div></div>
+    <div class="hint" id="zoneNow"></div>
+    <div class="zoneLegend" id="zoneLegend"></div>
+    <div class="cov"><span class="covLab">18"</span><div class="covTrack"><div class="covFill" style="left:5.2%;width:50.4%"></div></div><span class="covHz">~32-100 Hz</span></div>
+    <div class="cov"><span class="covLab">15"</span><div class="covTrack"><div class="covFill" style="left:11.1%;width:59.3%"></div></div><span class="covHz">~40-120 Hz</span></div>
+    <div class="hint">Couverture utile typique d'un sub du commerce. Nos 15 pouces : 500 W RMS, 1000 W crête, 132 dB SPL max.</div>
     <div class="hint" id="lambdaInfo"></div>
 
     <h2>Grille</h2>
@@ -212,11 +266,13 @@
     </div>
     <table class="sources">
       <thead>
-        <tr><th>#</th><th>x / y (m)</th><th>délai (ms)</th><th>phase (°)</th><th></th></tr>
+        <tr><th>#</th><th>x / y (m)</th><th>ms</th><th>W</th><th>LPF</th></tr>
       </thead>
       <tbody id="srcRows"></tbody>
     </table>
-    <div class="hint">Glisser les caissons sur la carte (doigt ou souris). Ø inverse la polarité (+180°), M coupe le caisson.</div>
+    <div class="hint">Glisser les caissons sur la carte (doigt ou souris). Cliquer une ligne pour éditer le caisson ci-dessous.</div>
+
+    <div class="detail" id="detail"></div>
 
     <h2>Configurations types</h2>
     <div class="presets">
@@ -235,9 +291,11 @@
 
 const C_SON = 343;          // m/s
 const R_MIN = 0.3;          // m, borne près de la source
-const DB_MIN = -36, DB_MAX = 12;   // échelle de couleur (dB rel. 1 source à 1 m)
+const DB_MIN = -36, DB_MAX = 12;   // échelle de couleur (dB rel. 1 source 500 W à 1 m)
 const CELL = 3;             // px par cellule de calcul (résolution du champ)
 const MAX_CSS_W = 980;      // largeur d'affichage max du canvas
+const F_LO = 25, F_HI = 160;
+const P_REF = 500;          // W RMS de référence (notre 15 pouces)
 
 const view = document.getElementById("view");
 const ctx = view.getContext("2d");
@@ -252,8 +310,17 @@ const state = {
 };
 
 function newSource(x, y) {
-  return { x, y, delay: 0, phase: 0, invert: false, mute: false };
+  return { x, y, delay: 0, phase: 0, power: P_REF, lpfOn: false, lpfFc: 100, lpfSlope: 24, invert: false, mute: false };
 }
+
+/* ---------- zones d'écoute (repères house / techno) ---------- */
+
+const ZONES = [
+  { f0: 25,  f1: 40,  color: "#5b4b9e", label: "ressenti corps", desc: "infra-grave, vibre dans le corps et le sol, plus ressenti qu'entendu" },
+  { f0: 40,  f1: 60,  color: "#2563eb", label: "vibration",      desc: "basses profondes, fondamentale du kick techno (45-55 Hz)" },
+  { f0: 60,  f1: 90,  color: "#0e9f6e", label: "kick torse",     desc: "impact physique dans la poitrine, le punch house / techno" },
+  { f0: 90,  f1: 160, color: "#d97706", label: "haut sub",       desc: "attaque du kick, notes de basse audibles, raccord avec les têtes" },
+];
 
 /* ---------- presets ---------- */
 
@@ -322,6 +389,18 @@ function jet(t) {
 
 /* ---------- physique ---------- */
 
+// Filtre passe-bas type Butterworth d'ordre n = pente/6 :
+// -3 dB à fc, pente asymptotique n×6 dB/oct, déphasage approché -n·atan(f/fc)
+function lpfResponse(s, f) {
+  if (!s.lpfOn) return { gain: 1, phase: 0 };
+  const n = s.lpfSlope / 6;
+  const ratio = f / s.lpfFc;
+  return {
+    gain: Math.pow(1 + Math.pow(ratio, 2 * n), -0.5),
+    phase: -n * Math.atan(ratio),
+  };
+}
+
 function splAt(mx, my) {
   const omega = 2 * Math.PI * state.freq;
   const k = omega / C_SON;
@@ -330,10 +409,12 @@ function splAt(mx, my) {
     if (s.mute) continue;
     actives++;
     const r = Math.max(Math.hypot(mx - s.x, my - s.y), R_MIN);
+    const lpf = lpfResponse(s, state.freq);
+    const a = Math.sqrt(s.power / P_REF) * lpf.gain / r;
     const ph = -(k * r + omega * s.delay / 1000)
              + s.phase * Math.PI / 180
-             + (s.invert ? Math.PI : 0);
-    const a = 1 / r;
+             + (s.invert ? Math.PI : 0)
+             + lpf.phase;
     re += a * Math.cos(ph);
     im += a * Math.sin(ph);
   }
@@ -361,6 +442,7 @@ function layoutCanvas() {
 
 let needsDraw = false;
 function requestDraw() {
+  if (document.hidden) { draw(); return; }   // rAF gelé quand l'onglet est caché
   if (needsDraw) return;
   needsDraw = true;
   requestAnimationFrame(() => { needsDraw = false; draw(); });
@@ -437,9 +519,33 @@ function drawLegend() {
   document.getElementById("dbMax").textContent = "+" + DB_MAX + " dB";
 }
 
+/* ---------- zones de fréquence (barre + légende) ---------- */
+
+function buildZoneBar() {
+  const bar = document.getElementById("zoneBar");
+  ZONES.forEach(z => {
+    const d = document.createElement("div");
+    d.style.width = ((z.f1 - z.f0) / (F_HI - F_LO) * 100) + "%";
+    d.style.background = z.color;
+    d.style.opacity = "0.75";
+    bar.insertBefore(d, document.getElementById("freqMarker"));
+  });
+  const leg = document.getElementById("zoneLegend");
+  ZONES.forEach(z => {
+    const d = document.createElement("div");
+    d.innerHTML = '<span class="dot" style="background:' + z.color + '"></span><b>' +
+      z.f0 + "-" + z.f1 + " Hz</b> " + z.label;
+    leg.appendChild(d);
+  });
+}
+
 /* ---------- panneau sources ---------- */
 
-function renderPanel() {
+function lpfText(s) {
+  return s.lpfOn ? s.lpfFc + "/" + s.lpfSlope : "-";
+}
+
+function renderTable() {
   document.getElementById("srcCount").textContent =
     state.sources.length + " caisson" + (state.sources.length > 1 ? "s" : "");
   const tbody = document.getElementById("srcRows");
@@ -447,51 +553,100 @@ function renderPanel() {
   state.sources.forEach((s, i) => {
     const tr = document.createElement("tr");
     tr.className = "src" + (i === state.selected ? " sel" : "");
-    tr.addEventListener("click", () => { state.selected = i; renderPanel(); requestDraw(); });
+    tr.addEventListener("click", () => { state.selected = i; renderTable(); renderDetail(); requestDraw(); });
 
     const tdN = document.createElement("td");
     const tag = document.createElement("span");
-    tag.className = "tag"; tag.textContent = i + 1;
+    tag.className = "tag" + (s.mute ? " off" : "");
+    tag.textContent = i + 1;
     tdN.appendChild(tag);
+    if (s.invert) tdN.appendChild(document.createTextNode(" Ø"));
 
-    const tdPos = document.createElement("td");
-    tdPos.textContent = s.x.toFixed(1) + " / " + s.y.toFixed(1);
-    tdPos.style.color = "var(--muted)";
-
-    const tdDelay = document.createElement("td");
-    const inD = document.createElement("input");
-    inD.type = "number"; inD.min = 0; inD.max = 50; inD.step = 0.1; inD.value = s.delay;
-    inD.inputMode = "decimal";
-    inD.addEventListener("input", () => { s.delay = clamp(parseFloat(inD.value) || 0, 0, 50); requestDraw(); });
-    inD.addEventListener("click", e => e.stopPropagation());
-    tdDelay.appendChild(inD);
-
-    const tdPhase = document.createElement("td");
-    const inP = document.createElement("input");
-    inP.type = "number"; inP.min = 0; inP.max = 359; inP.step = 5; inP.value = s.phase;
-    inP.inputMode = "numeric";
-    inP.addEventListener("input", () => { s.phase = clamp(parseFloat(inP.value) || 0, 0, 359); requestDraw(); });
-    inP.addEventListener("click", e => e.stopPropagation());
-    tdPhase.appendChild(inP);
-
-    const tdBtn = document.createElement("td");
-    const bInv = document.createElement("button");
-    bInv.className = "toggle" + (s.invert ? " on" : "");
-    bInv.textContent = "Ø";
-    bInv.title = "Inversion de polarité (+180°)";
-    bInv.addEventListener("click", e => { e.stopPropagation(); s.invert = !s.invert; renderPanel(); requestDraw(); });
-    const bMute = document.createElement("button");
-    bMute.className = "toggle" + (s.mute ? " on" : "");
-    bMute.textContent = "M";
-    bMute.title = "Couper ce caisson";
-    bMute.addEventListener("click", e => { e.stopPropagation(); s.mute = !s.mute; renderPanel(); requestDraw(); });
-    tdBtn.appendChild(bInv);
-    tdBtn.appendChild(document.createTextNode(" "));
-    tdBtn.appendChild(bMute);
-
-    tr.append(tdN, tdPos, tdDelay, tdPhase, tdBtn);
+    const mk = (txt, cls) => {
+      const td = document.createElement("td");
+      td.textContent = txt;
+      td.className = "num " + cls;
+      return td;
+    };
+    tr.append(
+      tdN,
+      mk(s.x.toFixed(1) + " / " + s.y.toFixed(1), "c-pos"),
+      mk(s.delay, "c-delay"),
+      mk(s.power, "c-power"),
+      mk(lpfText(s), "c-lpf"),
+    );
     tbody.appendChild(tr);
   });
+}
+
+function updateRowCell(i, cls, txt) {
+  const tr = document.getElementById("srcRows").children[i];
+  if (tr) { const td = tr.querySelector("." + cls); if (td) td.textContent = txt; }
+}
+
+function renderDetail() {
+  const s = state.sources[state.selected];
+  const box = document.getElementById("detail");
+  box.innerHTML = "";
+  if (!s) return;
+
+  const title = document.createElement("h2");
+  title.textContent = "Caisson " + (state.selected + 1);
+  title.style.marginTop = "0";
+  box.appendChild(title);
+
+  const numInput = (val, min, max, step, onchange) => {
+    const inp = document.createElement("input");
+    inp.type = "number"; inp.min = min; inp.max = max; inp.step = step; inp.value = val;
+    inp.inputMode = "decimal";
+    inp.addEventListener("input", () => onchange(clamp(parseFloat(inp.value) || 0, min, max)));
+    return inp;
+  };
+  const row = (...els) => {
+    const d = document.createElement("div");
+    d.className = "row";
+    els.forEach(e => d.appendChild(typeof e === "string" ? Object.assign(document.createElement("label"), { textContent: e }) : e));
+    box.appendChild(d);
+    return d;
+  };
+
+  const i = state.selected;
+  row("Délai (ms)", numInput(s.delay, 0, 50, 0.1, v => { s.delay = v; updateRowCell(i, "c-delay", v); requestDraw(); }));
+  row("Phase (°)", numInput(s.phase, 0, 359, 5, v => { s.phase = v; requestDraw(); }));
+  row("Puissance (W)", numInput(s.power, 50, 1000, 50, v => { s.power = v; updateRowCell(i, "c-power", v); requestDraw(); }));
+
+  const bInv = document.createElement("button");
+  bInv.className = "toggle" + (s.invert ? " on" : "");
+  bInv.textContent = "Ø polarité";
+  bInv.addEventListener("click", () => { s.invert = !s.invert; renderTable(); renderDetail(); requestDraw(); });
+  const bMute = document.createElement("button");
+  bMute.className = "toggle" + (s.mute ? " on" : "");
+  bMute.textContent = "M mute";
+  bMute.addEventListener("click", () => { s.mute = !s.mute; renderTable(); renderDetail(); requestDraw(); });
+  row(bInv, bMute);
+
+  const cb = document.createElement("input");
+  cb.type = "checkbox"; cb.checked = s.lpfOn; cb.id = "lpfOn";
+  cb.addEventListener("change", () => { s.lpfOn = cb.checked; updateRowCell(i, "c-lpf", lpfText(s)); requestDraw(); });
+  const cbLab = document.createElement("label");
+  cbLab.htmlFor = "lpfOn"; cbLab.textContent = "Passe-bas"; cbLab.style.flex = "0 0 auto";
+  const fcInp = numInput(s.lpfFc, 40, 160, 5, v => { s.lpfFc = v; updateRowCell(i, "c-lpf", lpfText(s)); requestDraw(); });
+  const slope = document.createElement("select");
+  [12, 24, 48].forEach(v => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = v + " dB/oct";
+    if (v === s.lpfSlope) o.selected = true;
+    slope.appendChild(o);
+  });
+  slope.addEventListener("change", () => { s.lpfSlope = parseInt(slope.value, 10); updateRowCell(i, "c-lpf", lpfText(s)); requestDraw(); });
+  const hzLab = document.createElement("label");
+  hzLab.textContent = "Hz"; hzLab.style.flex = "0 0 auto";
+  row(cb, cbLab, fcInp, hzLab, slope);
+
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = "500 W = référence (notre 15 pouces). Puissance ×2 = +3 dB. Le passe-bas atténue et déphase au-dessus de sa coupure : balayez la fréquence pour voir ce caisson s'effacer.";
+  box.appendChild(hint);
 }
 
 /* ---------- interactions carte (souris + tactile) ---------- */
@@ -522,7 +677,8 @@ function startDrag(clientX, clientY) {
     dragIdx = idx;
     state.selected = idx;
     view.classList.add("dragging");
-    renderPanel();
+    renderTable();
+    renderDetail();
     requestDraw();
   }
   return idx >= 0;
@@ -534,7 +690,7 @@ function moveDrag(clientX, clientY) {
   const s = state.sources[dragIdx];
   s.x = clamp(m.x, 0.3, state.W - 0.3);
   s.y = clamp(m.y, 0.3, state.H - 0.3);
-  renderPanel();
+  updateRowCell(dragIdx, "c-pos", s.x.toFixed(1) + " / " + s.y.toFixed(1));
   requestDraw();
 }
 
@@ -583,32 +739,73 @@ view.addEventListener("touchmove", e => {
 view.addEventListener("touchend", endDrag);
 view.addEventListener("touchcancel", endDrag);
 
-/* ---------- contrôles ---------- */
+/* ---------- fréquence : affichage + balayage automatique ---------- */
 
 function updateFreqInfo() {
   document.getElementById("freqVal").textContent = state.freq + " Hz";
   const lambda = C_SON / state.freq;
   document.getElementById("lambdaInfo").textContent =
     "Longueur d'onde λ = " + lambda.toFixed(2) + " m. Les annulations apparaissent quand les trajets diffèrent d'une demi-longueur d'onde (" + (lambda / 2).toFixed(2) + " m).";
+  document.getElementById("freqMarker").style.left =
+    ((state.freq - F_LO) / (F_HI - F_LO) * 100) + "%";
+  const z = ZONES.find(z => state.freq <= z.f1) || ZONES[ZONES.length - 1];
+  document.getElementById("zoneNow").textContent =
+    state.freq + " Hz, zone « " + z.label + " » : " + z.desc + ".";
 }
 
+let playing = false;
+let playTimer = null;
+let playT0 = 0;
+const SWEEP_S = 14;          // durée d'un aller-retour complet
+
+function playTick() {
+  if (!playing) return;
+  const u = ((performance.now() - playT0) / 1000 % SWEEP_S) / SWEEP_S;   // 0..1
+  const tri = u < 0.5 ? u * 2 : 2 - u * 2;                // aller-retour
+  state.freq = Math.round(F_LO + tri * (F_HI - F_LO));
+  document.getElementById("freq").value = state.freq;
+  updateFreqInfo();
+  draw();
+}
+
+function setPlaying(on) {
+  playing = on;
+  const btn = document.getElementById("playBtn");
+  btn.innerHTML = on ? "&#9632; Stop" : "&#9654; Play";
+  btn.classList.toggle("primary", on);
+  if (on) {
+    // démarrer le triangle à la fréquence courante (phase montante)
+    const frac = (state.freq - F_LO) / (F_HI - F_LO);
+    playT0 = performance.now() - frac * (SWEEP_S * 500);
+    playTimer = setInterval(playTick, 33);
+  } else {
+    clearInterval(playTimer);
+    playTimer = null;
+  }
+}
+
+document.getElementById("playBtn").addEventListener("click", () => setPlaying(!playing));
+
 document.getElementById("freq").addEventListener("input", e => {
+  if (playing) setPlaying(false);
   state.freq = parseInt(e.target.value, 10);
   updateFreqInfo();
   requestDraw();
 });
 
+/* ---------- contrôles ---------- */
+
 document.getElementById("gw").addEventListener("change", e => {
   state.W = clamp(parseFloat(e.target.value) || 30, 10, 80);
   e.target.value = state.W;
   state.sources.forEach(s => { s.x = clamp(s.x, 0.3, state.W - 0.3); });
-  layoutCanvas(); renderPanel(); requestDraw();
+  layoutCanvas(); renderTable(); requestDraw();
 });
 document.getElementById("gh").addEventListener("change", e => {
   state.H = clamp(parseFloat(e.target.value) || 20, 8, 60);
   e.target.value = state.H;
   state.sources.forEach(s => { s.y = clamp(s.y, 0.3, state.H - 0.3); });
-  layoutCanvas(); renderPanel(); requestDraw();
+  layoutCanvas(); renderTable(); requestDraw();
 });
 
 document.getElementById("addSrc").addEventListener("click", () => {
@@ -616,14 +813,14 @@ document.getElementById("addSrc").addEventListener("click", () => {
   const y = 2 + (state.sources.length * 2.2) % (state.H - 4);
   state.sources.push(newSource(3, y));
   state.selected = state.sources.length - 1;
-  renderPanel(); requestDraw();
+  renderTable(); renderDetail(); requestDraw();
 });
 
 document.getElementById("delSrc").addEventListener("click", () => {
   if (state.sources.length <= 1) return;
   state.sources.pop();
   state.selected = Math.min(state.selected, state.sources.length - 1);
-  renderPanel(); requestDraw();
+  renderTable(); renderDetail(); requestDraw();
 });
 
 document.querySelectorAll("[data-preset]").forEach(btn => {
@@ -632,7 +829,7 @@ document.querySelectorAll("[data-preset]").forEach(btn => {
     state.sources = p.build(state.W, state.H);
     state.selected = 0;
     document.getElementById("presetInfo").textContent = p.info;
-    renderPanel(); requestDraw();
+    renderTable(); renderDetail(); requestDraw();
   });
 });
 
@@ -646,9 +843,11 @@ window.addEventListener("resize", () => {
 /* ---------- init ---------- */
 
 state.sources = PRESETS.deux.build(state.W, state.H);
+buildZoneBar();
 updateFreqInfo();
 drawLegend();
-renderPanel();
+renderTable();
+renderDetail();
 layoutCanvas();
 draw();
 </script>
