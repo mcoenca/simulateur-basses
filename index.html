@@ -332,8 +332,20 @@ const state = {
 };
 
 function newSource(x, y) {
-  return { x, y, delay: 0, phase: 0, power: P_REF, lpfOn: false, lpfFc: 100, lpfSlope: 24, invert: false, mute: false };
+  return { x, y, delay: 0, phase: 0, power: P_REF, lpfOn: false, lpfFc: 100, lpfSlope: 24, lpfPhase: true, model: "", invert: false, mute: false };
 }
+
+// axe Y centré : la ligne du milieu de la grille vaut 0, +Y vers le bas, -Y vers le haut
+function dY(iy) { return iy - state.H / 2; }   // interne -> affiché
+function iY(dy) { return dy + state.H / 2; }   // affiché -> interne
+function fmtY(iy) { const v = dY(iy); return (v > 0 ? "+" : "") + v.toFixed(1); }
+function posTxt(s) { return s.x.toFixed(1) + " / " + fmtY(s.y); }
+
+// modèles de subs Elokance (specs constructeur, bande -10 dB jusqu'à 180 Hz)
+const MODELS = {
+  sub18: { model: "18\" Elo", power: 500, lpfOn: true, lpfFc: 105, lpfSlope: 12, lpfPhase: false },
+  sub15: { model: "15\" Elo", power: 500, lpfOn: true, lpfFc: 105, lpfSlope: 12, lpfPhase: false },
+};
 
 /* ---------- zones d'écoute (repères house / techno) ---------- */
 
@@ -419,7 +431,7 @@ function lpfResponse(s, f) {
   const ratio = f / s.lpfFc;
   return {
     gain: Math.pow(1 + Math.pow(ratio, 2 * n), -0.5),
-    phase: -n * Math.atan(ratio),
+    phase: s.lpfPhase ? -n * Math.atan(ratio) : 0,
   };
 }
 
@@ -494,24 +506,39 @@ function draw() {
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(off, 0, 0, pw, ph);
 
-  // quadrillage : lignes fines tous les 1 m, marquées tous les 5 m, échelles en mètres
+  // quadrillage : lignes fines tous les 1 m, marquées tous les 5 m, échelles en mètres.
+  // axe Y centré : graduations ancrées sur la ligne du milieu (0), puis ±5 m symétriques.
   const dpr = view.width / (parseFloat(view.style.width) || view.width);
+  const cy = state.H / 2;                                  // ligne médiane = Y 0
+  const yMarks = [];
+  for (let iy = cy; iy <= state.H - 0.001; iy += 5) yMarks.push(iy);
+  for (let iy = cy - 5; iy >= 0.001; iy -= 5) yMarks.push(iy);
+
   if (scale >= 5) {
     ctx.strokeStyle = "rgba(255,255,255,0.18)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let x = 1; x < state.W; x++) if (x % 5) { ctx.moveTo(x * scale, 0); ctx.lineTo(x * scale, ph); }
-    for (let y = 1; y < state.H; y++) if (y % 5) { ctx.moveTo(0, y * scale); ctx.lineTo(pw, y * scale); }
+    for (let iy = 1; iy < state.H; iy++) if (Math.abs((iy - cy) % 5) > 0.01) { ctx.moveTo(0, iy * scale); ctx.lineTo(pw, iy * scale); }
     ctx.stroke();
   }
-  ctx.strokeStyle = "rgba(255,255,255,0.6)";
+  ctx.strokeStyle = "rgba(255,255,255,0.55)";
   ctx.lineWidth = Math.max(1, Math.round(dpr));
   ctx.beginPath();
   for (let x = 5; x < state.W; x += 5) { ctx.moveTo(x * scale, 0); ctx.lineTo(x * scale, ph); }
-  for (let y = 5; y < state.H; y += 5) { ctx.moveTo(0, y * scale); ctx.lineTo(pw, y * scale); }
+  yMarks.forEach(iy => { if (Math.abs(iy - cy) > 0.01) { ctx.moveTo(0, iy * scale); ctx.lineTo(pw, iy * scale); } });
   ctx.stroke();
 
-  // échelles : graduations en mètres le long des bords haut et gauche
+  // ligne médiane Y = 0 (repère de symétrie), plus marquée
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = Math.max(1.5, 1.6 * dpr);
+  ctx.setLineDash([8 * dpr, 6 * dpr]);
+  ctx.beginPath();
+  ctx.moveTo(0, cy * scale); ctx.lineTo(pw, cy * scale);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // échelles : graduations en mètres le long des bords haut (X) et gauche (Y centré)
   const fs = Math.round(10 * dpr);
   ctx.font = "600 " + fs + "px sans-serif";
   ctx.lineJoin = "round";
@@ -526,10 +553,12 @@ function draw() {
   }
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  for (let y = 5; y < state.H; y += 5) {
-    ctx.strokeText(String(y), 4 * dpr, y * scale);
-    ctx.fillText(String(y), 4 * dpr, y * scale);
-  }
+  yMarks.forEach(iy => {
+    const v = Math.round(iy - cy);
+    const lab = v === 0 ? "0" : (v > 0 ? "+" + v : String(v));
+    ctx.strokeText(lab, 4 * dpr, iy * scale);
+    ctx.fillText(lab, 4 * dpr, iy * scale);
+  });
   ctx.textBaseline = "top";
   ctx.strokeText("m", 4 * dpr, 3 * dpr);
   ctx.fillText("m", 4 * dpr, 3 * dpr);
@@ -557,6 +586,16 @@ function draw() {
       ctx.fillStyle = "#1c1e21";
       ctx.font = "bold " + Math.round(sz * 0.6) + "px sans-serif";
       ctx.fillText("Ø", x, y - sz / 2 - sz * 0.5);
+    }
+    if (s.model) {
+      ctx.font = "600 " + Math.round(sz * 0.42) + "px sans-serif";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 3 * (view.width / (parseFloat(view.style.width) || view.width));
+      ctx.strokeStyle = "rgba(0,0,0,0.55)";
+      ctx.textBaseline = "top";
+      ctx.strokeText(s.model, x, y + sz / 2 + 2);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(s.model, x, y + sz / 2 + 2);
     }
   });
 }
@@ -615,6 +654,12 @@ function renderTable() {
     tag.textContent = i + 1;
     tdN.appendChild(tag);
     if (s.invert) tdN.appendChild(document.createTextNode(" Ø"));
+    if (s.model) {
+      const m = document.createElement("div");
+      m.textContent = s.model;
+      m.style.cssText = "font-size:10px;color:var(--muted);margin-top:1px";
+      tdN.appendChild(m);
+    }
 
     const mk = (txt, cls) => {
       const td = document.createElement("td");
@@ -624,7 +669,7 @@ function renderTable() {
     };
     tr.append(
       tdN,
-      mk(s.x.toFixed(1) + " / " + s.y.toFixed(1), "c-pos"),
+      mk(posTxt(s), "c-pos"),
       mk(s.delay, "c-delay"),
       mk(s.power, "c-power"),
       mk(lpfText(s), "c-lpf"),
@@ -645,7 +690,7 @@ function renderDetail() {
   if (!s) return;
 
   const title = document.createElement("h2");
-  title.textContent = "Caisson " + (state.selected + 1);
+  title.textContent = "Caisson " + (state.selected + 1) + (s.model ? " — " + s.model : "");
   title.style.marginTop = "0";
   box.appendChild(title);
 
@@ -665,10 +710,11 @@ function renderDetail() {
   };
 
   const i = state.selected;
-  const posTxt = () => s.x.toFixed(1) + " / " + s.y.toFixed(1);
-  const xInp = numInput(+s.x.toFixed(1), 0.3, state.W - 0.3, 0.1, v => { s.x = v; updateRowCell(i, "c-pos", posTxt()); requestDraw(); });
+  const xInp = numInput(+s.x.toFixed(1), 0.3, state.W - 0.3, 0.1, v => { s.x = v; updateRowCell(i, "c-pos", posTxt(s)); requestDraw(); });
   xInp.id = "detX";
-  const yInp = numInput(+s.y.toFixed(1), 0.3, state.H - 0.3, 0.1, v => { s.y = v; updateRowCell(i, "c-pos", posTxt()); requestDraw(); });
+  // y saisi en coordonnées centrées (0 = ligne médiane, + vers le bas)
+  const yLo = +dY(0.3).toFixed(1), yHi = +dY(state.H - 0.3).toFixed(1);
+  const yInp = numInput(+dY(s.y).toFixed(1), yLo, yHi, 0.1, v => { s.y = clamp(iY(v), 0.3, state.H - 0.3); updateRowCell(i, "c-pos", posTxt(s)); requestDraw(); });
   yInp.id = "detY";
   row("x / y (m)", xInp, yInp);
   row("Délai (ms)", numInput(s.delay, 0, 50, 0.1, v => { s.delay = v; updateRowCell(i, "c-delay", v); requestDraw(); }));
@@ -703,9 +749,33 @@ function renderDetail() {
   hzLab.textContent = "Hz"; hzLab.style.flex = "0 0 auto";
   row(cb, cbLab, fcInp, hzLab, slope);
 
+  // toggle du déphasage : ON = filtre électronique (Butterworth), OFF = réponse naturelle du sub (magnitude seule)
+  const bPhase = document.createElement("button");
+  bPhase.className = "toggle" + (s.lpfPhase ? " on" : "");
+  bPhase.textContent = s.lpfPhase ? "déphasage : oui" : "déphasage : non";
+  bPhase.title = "Oui = filtre électronique (déphase). Non = réponse naturelle du sub (atténuation seule).";
+  bPhase.addEventListener("click", () => { s.lpfPhase = !s.lpfPhase; renderDetail(); requestDraw(); });
+  row(bPhase);
+
+  const models = document.createElement("div");
+  models.className = "row";
+  const mkModel = (key, txt) => {
+    const b = document.createElement("button");
+    b.textContent = txt;
+    b.addEventListener("click", () => {
+      Object.assign(s, MODELS[key]);
+      renderTable(); renderDetail(); requestDraw();
+    });
+    return b;
+  };
+  const mLab = document.createElement("label");
+  mLab.textContent = "Modèle"; mLab.style.flex = "0 0 auto";
+  models.append(mLab, mkModel("sub18", "Sub18 Elo"), mkModel("sub15", "Sub15 Elo"));
+  box.appendChild(models);
+
   const hint = document.createElement("div");
   hint.className = "hint";
-  hint.textContent = "500 W = référence (notre 15 pouces). Puissance ×2 = +3 dB. Le passe-bas atténue et déphase au-dessus de sa coupure : balayez la fréquence pour voir ce caisson s'effacer.";
+  hint.textContent = "500 W = référence. Puissance ×2 = +3 dB. Les modèles Elo appliquent un passe-bas en réponse naturelle (-10 dB vers 180 Hz, sans déphasage) : le 18 et le 15 pouces partagent ce haut de bande, leur écart réel est l'extension dans le grave (40 vs 35 Hz) que cet outil mono-fréquence ne rend pas.";
   box.appendChild(hint);
 }
 
@@ -750,14 +820,14 @@ function moveDrag(clientX, clientY) {
   const s = state.sources[dragIdx];
   s.x = clamp(m.x, 0.3, state.W - 0.3);
   s.y = clamp(m.y, 0.3, state.H - 0.3);
-  updateRowCell(dragIdx, "c-pos", s.x.toFixed(1) + " / " + s.y.toFixed(1));
+  updateRowCell(dragIdx, "c-pos", posTxt(s));
   // suivi en direct : sonde sous la carte + champs x/y du panneau caisson
   document.getElementById("probe").textContent =
-    "caisson " + (dragIdx + 1) + " : x " + s.x.toFixed(1) + " m, y " + s.y.toFixed(1) + " m";
+    "caisson " + (dragIdx + 1) + " : x " + s.x.toFixed(1) + " m, y " + fmtY(s.y) + " m";
   if (state.selected === dragIdx) {
     const dx = document.getElementById("detX"), dy = document.getElementById("detY");
     if (dx) dx.value = s.x.toFixed(1);
-    if (dy) dy.value = s.y.toFixed(1);
+    if (dy) dy.value = dY(s.y).toFixed(1);
   }
   requestDraw();
 }
@@ -779,7 +849,7 @@ view.addEventListener("mousemove", e => {
   if (m.x < 0 || m.y < 0 || m.x > state.W || m.y > state.H) return;
   const spl = splAt(m.x, m.y);
   document.getElementById("probe").textContent =
-    "x " + m.x.toFixed(1) + " m, y " + m.y.toFixed(1) + " m : " +
+    "x " + m.x.toFixed(1) + " m, y " + fmtY(m.y) + " m : " +
     (isFinite(spl) ? spl.toFixed(1) + " dB (rel.)" : "silence");
 });
 
@@ -792,7 +862,7 @@ view.addEventListener("touchstart", e => {
     const m = clientToM(t.clientX, t.clientY);
     const spl = splAt(m.x, m.y);
     document.getElementById("probe").textContent =
-      "x " + m.x.toFixed(1) + " m, y " + m.y.toFixed(1) + " m : " +
+      "x " + m.x.toFixed(1) + " m, y " + fmtY(m.y) + " m : " +
       (isFinite(spl) ? spl.toFixed(1) + " dB (rel.)" : "silence");
   }
 }, { passive: false });
@@ -824,7 +894,7 @@ function updateFreqInfo() {
 let playing = false;
 let playTimer = null;
 let playT0 = 0;
-const SWEEP_S = 14;          // durée d'un aller-retour complet
+const SWEEP_S = 7;           // durée d'un aller-retour complet
 
 function playTick() {
   if (!playing) return;
