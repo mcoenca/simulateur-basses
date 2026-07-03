@@ -255,9 +255,9 @@
     <div class="zoneBar" id="zoneBar"><div id="freqMarker"></div></div>
     <div class="hint" id="zoneNow"></div>
     <div class="zoneLegend" id="zoneLegend"></div>
-    <div class="cov"><span class="covLab">18"</span><div class="covTrack"><div class="covFill" style="left:5.2%;width:50.4%"></div></div><span class="covHz">~32-100 Hz</span></div>
-    <div class="cov"><span class="covLab">15"</span><div class="covTrack"><div class="covFill" style="left:11.1%;width:59.3%"></div></div><span class="covHz">~40-120 Hz</span></div>
-    <div class="hint">Couverture utile typique d'un sub du commerce. Nos 15 pouces : 500 W RMS, 1000 W crête, 132 dB SPL max.</div>
+    <div class="cov"><span class="covLab">18"</span><div class="covTrack"><div class="covFill" style="left:3.7%;width:96.3%"></div></div><span class="covHz">30-180 Hz</span></div>
+    <div class="cov"><span class="covLab">15"</span><div class="covTrack"><div class="covFill" style="left:7.4%;width:92.6%"></div></div><span class="covHz">35-180 Hz</span></div>
+    <div class="hint">Bande passante -10 dB des Elokance Elo (specs constructeur). Sub18 : 135 dB SPL max. Sub15 : 132 dB. 500 W RMS et coupure réglable 80-180 Hz pour les deux.</div>
     <div class="hint" id="lambdaInfo"></div>
 
     <h2>Grille</h2>
@@ -276,7 +276,7 @@
     </div>
     <table class="sources">
       <thead>
-        <tr><th>#</th><th>x / y (m)</th><th>ms</th><th>W</th><th>LPF</th></tr>
+        <tr><th>#</th><th>x / y (m)</th><th>ms</th><th>W</th><th>HPF</th><th>LPF</th></tr>
       </thead>
       <tbody id="srcRows"></tbody>
     </table>
@@ -332,7 +332,10 @@ const state = {
 };
 
 function newSource(x, y) {
-  return { x, y, delay: 0, phase: 0, power: P_REF, lpfOn: false, lpfFc: 100, lpfSlope: 24, lpfPhase: true, model: "", invert: false, mute: false };
+  return { x, y, delay: 0, phase: 0, power: P_REF, sens: 0,
+    lpfOn: false, lpfFc: 100, lpfSlope: 24,
+    hpfOn: false, hpfFc: 40, hpfSlope: 24,
+    lpfPhase: true, model: "", invert: false, mute: false };
 }
 
 // axe Y centré : la ligne du milieu de la grille vaut 0, +Y vers le bas, -Y vers le haut
@@ -341,10 +344,13 @@ function iY(dy) { return dy + state.H / 2; }   // affiché -> interne
 function fmtY(iy) { const v = dY(iy); return (v > 0 ? "+" : "") + v.toFixed(1); }
 function posTxt(s) { return s.x.toFixed(1) + " / " + fmtY(s.y); }
 
-// modèles de subs Elokance (specs constructeur, bande -10 dB jusqu'à 180 Hz)
+// modèles de subs Elokance (specs constructeur, bande passante -10 dB)
+// Sub18A : 30-180 Hz, 135 dB SPL max. Sub15A : 35-180 Hz, 132 dB SPL max. 500 W RMS les deux.
+// Réponse naturelle : passe-haut 24 dB/oct calé pour -10 dB au bas de bande,
+// passe-bas 12 dB/oct calé pour -10 dB à 180 Hz, sans déphasage. Sens +3 dB au 18 (135 vs 132).
 const MODELS = {
-  sub18: { model: "18\" Elo", power: 500, lpfOn: true, lpfFc: 105, lpfSlope: 12, lpfPhase: false },
-  sub15: { model: "15\" Elo", power: 500, lpfOn: true, lpfFc: 105, lpfSlope: 12, lpfPhase: false },
+  sub18: { model: "18\" Elo", power: 500, sens: 3, lpfOn: true, lpfFc: 105, lpfSlope: 12, hpfOn: true, hpfFc: 40, hpfSlope: 24, lpfPhase: false },
+  sub15: { model: "15\" Elo", power: 500, sens: 0, lpfOn: true, lpfFc: 105, lpfSlope: 12, hpfOn: true, hpfFc: 46, hpfSlope: 24, lpfPhase: false },
 };
 
 /* ---------- zones d'écoute (repères house / techno) ---------- */
@@ -423,16 +429,22 @@ function jet(t) {
 
 /* ---------- physique ---------- */
 
-// Filtre passe-bas type Butterworth d'ordre n = pente/6 :
-// -3 dB à fc, pente asymptotique n×6 dB/oct, déphasage approché -n·atan(f/fc)
-function lpfResponse(s, f) {
-  if (!s.lpfOn) return { gain: 1, phase: 0 };
-  const n = s.lpfSlope / 6;
-  const ratio = f / s.lpfFc;
-  return {
-    gain: Math.pow(1 + Math.pow(ratio, 2 * n), -0.5),
-    phase: s.lpfPhase ? -n * Math.atan(ratio) : 0,
-  };
+// Filtres type Butterworth d'ordre n = pente/6 : -3 dB à fc, pente asymptotique n×6 dB/oct.
+// Déphasage approché -n·atan(f/fc) (passe-bas) et +n·atan(fc/f) (passe-haut),
+// appliqué seulement si lpfPhase (filtre électronique) ; sinon réponse naturelle, amplitude seule.
+function filterResponse(s, f) {
+  let gain = 1, phase = 0;
+  if (s.lpfOn) {
+    const n = s.lpfSlope / 6, ratio = f / s.lpfFc;
+    gain *= Math.pow(1 + Math.pow(ratio, 2 * n), -0.5);
+    if (s.lpfPhase) phase -= n * Math.atan(ratio);
+  }
+  if (s.hpfOn) {
+    const n = s.hpfSlope / 6, ratio = s.hpfFc / f;
+    gain *= Math.pow(1 + Math.pow(ratio, 2 * n), -0.5);
+    if (s.lpfPhase) phase += n * Math.atan(ratio);
+  }
+  return { gain, phase };
 }
 
 function splAt(mx, my) {
@@ -443,12 +455,12 @@ function splAt(mx, my) {
     if (s.mute) continue;
     actives++;
     const r = Math.max(Math.hypot(mx - s.x, my - s.y), R_MIN);
-    const lpf = lpfResponse(s, state.freq);
-    const a = Math.sqrt(s.power / P_REF) * lpf.gain / r;
+    const flt = filterResponse(s, state.freq);
+    const a = Math.sqrt(s.power / P_REF) * Math.pow(10, (s.sens || 0) / 20) * flt.gain / r;
     const ph = -(k * r + omega * s.delay / 1000)
              + s.phase * Math.PI / 180
              + (s.invert ? Math.PI : 0)
-             + lpf.phase;
+             + flt.phase;
     re += a * Math.cos(ph);
     im += a * Math.sin(ph);
   }
@@ -637,6 +649,9 @@ function buildZoneBar() {
 function lpfText(s) {
   return s.lpfOn ? s.lpfFc + "/" + s.lpfSlope : "-";
 }
+function hpfText(s) {
+  return s.hpfOn ? s.hpfFc + "/" + s.hpfSlope : "-";
+}
 
 function renderTable() {
   document.getElementById("srcCount").textContent =
@@ -672,6 +687,7 @@ function renderTable() {
       mk(posTxt(s), "c-pos"),
       mk(s.delay, "c-delay"),
       mk(s.power, "c-power"),
+      mk(hpfText(s), "c-hpf"),
       mk(lpfText(s), "c-lpf"),
     );
     tbody.appendChild(tr);
@@ -720,6 +736,7 @@ function renderDetail() {
   row("Délai (ms)", numInput(s.delay, 0, 50, 0.1, v => { s.delay = v; updateRowCell(i, "c-delay", v); requestDraw(); }));
   row("Phase (°)", numInput(s.phase, 0, 359, 5, v => { s.phase = v; requestDraw(); }));
   row("Puissance (W)", numInput(s.power, 50, 1000, 50, v => { s.power = v; updateRowCell(i, "c-power", v); requestDraw(); }));
+  row("Sensibilité (dB)", numInput(s.sens || 0, -10, 10, 0.5, v => { s.sens = v; requestDraw(); }));
 
   const bInv = document.createElement("button");
   bInv.className = "toggle" + (s.invert ? " on" : "");
@@ -731,29 +748,34 @@ function renderDetail() {
   bMute.addEventListener("click", () => { s.mute = !s.mute; renderTable(); renderDetail(); requestDraw(); });
   row(bInv, bMute);
 
-  const cb = document.createElement("input");
-  cb.type = "checkbox"; cb.checked = s.lpfOn; cb.id = "lpfOn";
-  cb.addEventListener("change", () => { s.lpfOn = cb.checked; updateRowCell(i, "c-lpf", lpfText(s)); requestDraw(); });
-  const cbLab = document.createElement("label");
-  cbLab.htmlFor = "lpfOn"; cbLab.textContent = "Passe-bas"; cbLab.style.flex = "0 0 auto";
-  const fcInp = numInput(s.lpfFc, 40, 160, 5, v => { s.lpfFc = v; updateRowCell(i, "c-lpf", lpfText(s)); requestDraw(); });
-  const slope = document.createElement("select");
-  [12, 24, 48].forEach(v => {
-    const o = document.createElement("option");
-    o.value = v; o.textContent = v + " dB/oct";
-    if (v === s.lpfSlope) o.selected = true;
-    slope.appendChild(o);
-  });
-  slope.addEventListener("change", () => { s.lpfSlope = parseInt(slope.value, 10); updateRowCell(i, "c-lpf", lpfText(s)); requestDraw(); });
-  const hzLab = document.createElement("label");
-  hzLab.textContent = "Hz"; hzLab.style.flex = "0 0 auto";
-  row(cb, cbLab, fcInp, hzLab, slope);
+  // rangées passe-haut et passe-bas (mêmes contrôles : actif, fc, pente)
+  const filterRow = (label, onKey, fcKey, slopeKey, cell, txtFn, fcMin, fcMax) => {
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = s[onKey]; cb.id = "cb-" + onKey;
+    cb.addEventListener("change", () => { s[onKey] = cb.checked; updateRowCell(i, cell, txtFn(s)); requestDraw(); });
+    const cbLab = document.createElement("label");
+    cbLab.htmlFor = cb.id; cbLab.textContent = label; cbLab.style.flex = "0 0 auto";
+    const fcInp = numInput(s[fcKey], fcMin, fcMax, 5, v => { s[fcKey] = v; updateRowCell(i, cell, txtFn(s)); requestDraw(); });
+    const slope = document.createElement("select");
+    [12, 24, 48].forEach(v => {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = v + " dB/oct";
+      if (v === s[slopeKey]) o.selected = true;
+      slope.appendChild(o);
+    });
+    slope.addEventListener("change", () => { s[slopeKey] = parseInt(slope.value, 10); updateRowCell(i, cell, txtFn(s)); requestDraw(); });
+    const hzLab = document.createElement("label");
+    hzLab.textContent = "Hz"; hzLab.style.flex = "0 0 auto";
+    row(cb, cbLab, fcInp, hzLab, slope);
+  };
+  filterRow("Passe-haut", "hpfOn", "hpfFc", "hpfSlope", "c-hpf", hpfText, 25, 120);
+  filterRow("Passe-bas", "lpfOn", "lpfFc", "lpfSlope", "c-lpf", lpfText, 40, 180);
 
-  // toggle du déphasage : ON = filtre électronique (Butterworth), OFF = réponse naturelle du sub (magnitude seule)
+  // toggle du déphasage : ON = filtres électroniques (Butterworth), OFF = réponse naturelle du sub (amplitude seule)
   const bPhase = document.createElement("button");
   bPhase.className = "toggle" + (s.lpfPhase ? " on" : "");
-  bPhase.textContent = s.lpfPhase ? "déphasage : oui" : "déphasage : non";
-  bPhase.title = "Oui = filtre électronique (déphase). Non = réponse naturelle du sub (atténuation seule).";
+  bPhase.textContent = s.lpfPhase ? "déphasage filtres : oui" : "déphasage filtres : non";
+  bPhase.title = "Oui = filtres électroniques (déphasent). Non = réponse naturelle du sub (atténuation seule).";
   bPhase.addEventListener("click", () => { s.lpfPhase = !s.lpfPhase; renderDetail(); requestDraw(); });
   row(bPhase);
 
@@ -775,7 +797,7 @@ function renderDetail() {
 
   const hint = document.createElement("div");
   hint.className = "hint";
-  hint.textContent = "500 W = référence. Puissance ×2 = +3 dB. Les modèles Elo appliquent un passe-bas en réponse naturelle (-10 dB vers 180 Hz, sans déphasage) : le 18 et le 15 pouces partagent ce haut de bande, leur écart réel est l'extension dans le grave (40 vs 35 Hz) que cet outil mono-fréquence ne rend pas.";
+  hint.textContent = "500 W = référence, puissance ×2 = +3 dB, sensibilité = écart de niveau à puissance égale. Les modèles Elo appliquent la bande passante constructeur en réponse naturelle sans déphasage (-10 dB : 30-180 Hz pour le 18, 35-180 Hz pour le 15) et +3 dB de sensibilité au 18 (135 dB SPL max contre 132).";
   box.appendChild(hint);
 }
 

@@ -10,9 +10,9 @@ Ouvrir `index.html` dans un navigateur (aucune dépendance, aucun serveur requis
 
 - Carte de niveau relatif en dB par superposition des ondes de chaque source (atténuation en 1/r)
 - 1 à 8 caissons déplaçables à la souris ou au doigt
-- Réglages par caisson : délai (ms), phase (°), puissance (W, réf. 500 W RMS), filtre passe-bas (fc + pente 12/24/48 dB/oct, déphasage activable), inversion de polarité, mute
-- Filtre passe-bas avec déphasage optionnel : activé = filtre électronique (Butterworth), désactivé = réponse naturelle du sub (atténuation seule)
-- Boutons modèle Sub18 Elo / Sub15 Elo (Elokance) pour préconfigurer un caisson
+- Réglages par caisson : délai (ms), phase (°), puissance (W, réf. 500 W RMS), sensibilité (dB), passe-haut et passe-bas (fc + pente 12/24/48 dB/oct), inversion de polarité, mute
+- Déphasage des filtres optionnel : activé = filtres électroniques (Butterworth), désactivé = réponse naturelle du sub (atténuation seule)
+- Boutons modèle Sub18 Elo / Sub15 Elo (Elokance) : bande passante constructeur -10 dB (30-180 Hz / 35-180 Hz), +3 dB de sensibilité au 18 (135 dB SPL max contre 132)
 - Fréquence de 25 à 160 Hz avec repères d'écoute (ressenti corps, vibration, kick torse, haut sub) et couvertures typiques 18" / 15"
 - Mode Play : balayage automatique de toute la plage pour juger une géométrie sur l'ensemble du spectre
 - Grille en mètres paramétrable, graduée tous les 5 m avec lignes fines au mètre ; axe Y centré (0 au milieu, +/- symétriques) pour placer facilement en miroir
