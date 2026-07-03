@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Simulateur de basses - interférences entre caissons</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --border: #d8dbe0;
+    --text: #1c1e21;
+    --muted: #6b7280;
+    --accent: #2563eb;
+  }
+  * { box-sizing: border-box; }
+  html, body { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", -apple-system, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+  }
+  header {
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+  }
+  header h1 { font-size: 15px; margin: 0; }
+  header span { color: var(--muted); font-size: 12px; }
+  .layout {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    align-items: flex-start;
+  }
+  .panel {
+    width: 320px;
+    flex-shrink: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .panel h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin: 14px 0 6px 0;
+  }
+  .panel h2:first-child { margin-top: 0; }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+  }
+  .row label { flex: 1; }
+  .row input[type="range"] { flex: 2; }
+  .row input[type="number"] {
+    width: 62px;
+    padding: 3px 4px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .val { min-width: 58px; text-align: right; font-variant-numeric: tabular-nums; }
+  .hint { color: var(--muted); font-size: 11px; margin: 4px 0; line-height: 1.4; }
+  button {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    touch-action: manipulation;
+  }
+  button:hover { background: #f0f2f5; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #1d4ed8; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  table.sources {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  table.sources th {
+    text-align: left;
+    color: var(--muted);
+    font-weight: 500;
+    padding: 2px 4px;
+    font-size: 11px;
+  }
+  table.sources td { padding: 3px 4px; }
+  table.sources tr.src { cursor: pointer; border-radius: 4px; }
+  table.sources tr.src:hover td { background: #f0f4ff; }
+  table.sources tr.src.sel td { background: #e0eaff; }
+  table.sources input[type="number"] {
+    width: 54px;
+    padding: 4px 3px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .tag {
+    display: inline-block;
+    width: 18px; height: 18px;
+    line-height: 18px;
+    text-align: center;
+    background: #cc2222;
+    color: #fff;
+    border-radius: 3px;
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .toggle {
+    cursor: pointer;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 8px;
+    background: #fff;
+    font-size: 11px;
+    touch-action: manipulation;
+  }
+  .toggle.on { background: #1c1e21; color: #fff; border-color: #1c1e21; }
+  .canvas-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+  canvas#view {
+    display: block;
+    border-radius: 4px;
+    cursor: grab;
+    width: 100%;
+    height: auto;
+    touch-action: none;
+  }
+  canvas#view.dragging { cursor: grabbing; }
+  .under {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    gap: 8px 12px;
+  }
+  #probe { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .legend { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .legend canvas { border: 1px solid var(--border); border-radius: 2px; }
+
+  /* --- mobile --- */
+  @media (max-width: 820px) {
+    .layout { flex-direction: column; padding: 8px; gap: 8px; }
+    .panel { width: 100%; order: 2; }
+    .canvas-wrap { width: 100%; order: 1; }
+    header { padding: 8px 12px; }
+    header span { flex-basis: 100%; }
+    .row input[type="number"] { width: 72px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Simulateur de basses</h1>
+  <span>interférences entre caissons identiques - carte de niveau relatif (dB) à une fréquence donnée</span>
+</header>
+
+<div class="layout">
+  <div class="canvas-wrap">
+    <canvas id="view"></canvas>
+    <div class="under">
+      <span id="probe">Toucher ou survoler la carte pour lire le niveau.</span>
+      <div class="legend">
+        <span id="dbMin"></span>
+        <canvas id="legendBar" width="160" height="12"></canvas>
+        <span id="dbMax"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Fréquence</h2>
+    <div class="row">
+      <input type="range" id="freq" min="25" max="160" step="1" value="63">
+      <span class="val" id="freqVal">63 Hz</span>
+    </div>
+    <div class="hint" id="lambdaInfo"></div>
+
+    <h2>Grille</h2>
+    <div class="row">
+      <label>Largeur (m)</label>
+      <input type="number" id="gw" min="10" max="80" step="1" value="30">
+      <label style="flex:0">Prof. (m)</label>
+      <input type="number" id="gh" min="8" max="60" step="1" value="20">
+    </div>
+
+    <h2>Caissons</h2>
+    <div class="row">
+      <button id="addSrc">+ ajouter</button>
+      <button id="delSrc">- retirer</button>
+      <span class="hint" style="margin-left:auto" id="srcCount"></span>
+    </div>
+    <table class="sources">
+      <thead>
+        <tr><th>#</th><th>x / y (m)</th><th>délai (ms)</th><th>phase (°)</th><th></th></tr>
+      </thead>
+      <tbody id="srcRows"></tbody>
+    </table>
+    <div class="hint">Glisser les caissons sur la carte (doigt ou souris). Ø inverse la polarité (+180°), M coupe le caisson.</div>
+
+    <h2>Configurations types</h2>
+    <div class="presets">
+      <button data-preset="deux">2 côte à côte</button>
+      <button data-preset="ligne">Ligne de 4</button>
+      <button data-preset="arc">Arc électronique</button>
+      <button data-preset="endfire">End-fire</button>
+      <button data-preset="cardio">Cardioïde</button>
+    </div>
+    <div class="hint" id="presetInfo">Chaque configuration illustre un principe classique de mise en œuvre des subs.</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const C_SON = 343;          // m/s
+const R_MIN = 0.3;          // m, borne près de la source
+const DB_MIN = -36, DB_MAX = 12;   // échelle de couleur (dB rel. 1 source à 1 m)
+const CELL = 3;             // px par cellule de calcul (résolution du champ)
+const MAX_CSS_W = 980;      // largeur d'affichage max du canvas
+
+const view = document.getElementById("view");
+const ctx = view.getContext("2d");
+const off = document.createElement("canvas");
+const offCtx = off.getContext("2d");
+
+const state = {
+  freq: 63,
+  W: 30, H: 20,
+  sources: [],
+  selected: 0,
+};
+
+function newSource(x, y) {
+  return { x, y, delay: 0, phase: 0, invert: false, mute: false };
+}
+
+/* ---------- presets ---------- */
+
+const PRESETS = {
+  deux: {
+    info: "Deux caissons espacés : lobes et zones d'annulation apparaissent dès que l'écart dépasse une demi-longueur d'onde. Montez la fréquence pour voir le peigne se resserrer.",
+    build(W, H) {
+      const y = H / 2;
+      return [newSource(3, y - 1.5), newSource(3, y + 1.5)];
+    }
+  },
+  ligne: {
+    info: "Ligne de 4 sans délai : le front se resserre sur l'axe, la couverture latérale diminue avec la fréquence.",
+    build(W, H) {
+      const y = H / 2;
+      return [-2.25, -0.75, 0.75, 2.25].map(d => newSource(3, y + d));
+    }
+  },
+  arc: {
+    info: "Arc électronique : mêmes positions qu'une ligne, mais des délais croissants vers les extrémités courbent le front d'onde et élargissent la couverture (principe de l'image EASE Focus).",
+    build(W, H) {
+      const y = H / 2, R = 12;
+      return [-3, -1.5, 0, 1.5, 3].map(d => {
+        const s = newSource(3, y + d);
+        s.delay = Math.round((Math.hypot(R, d) - R) / C_SON * 10000) / 10;
+        return s;
+      });
+    }
+  },
+  endfire: {
+    info: "End-fire : caissons en file, chacun retardé du temps de vol qui le sépare du précédent. Les ondes s'additionnent vers l'avant et se contrarient vers l'arrière.",
+    build(W, H) {
+      const y = H / 2, d = 1.2;
+      return [0, 1, 2, 3].map(i => {
+        const s = newSource(2 + i * d, y);
+        s.delay = Math.round(i * d / C_SON * 10000) / 10;
+        return s;
+      });
+    }
+  },
+  cardio: {
+    info: "Cardioïde 2 boîtes : le caisson arrière est retardé du temps de vol et inversé en polarité. L'énergie est annulée derrière, conservée devant (utile pour protéger une scène).",
+    build(W, H) {
+      const y = H / 2, d = 1.2;
+      const front = newSource(3 + d, y);
+      const back = newSource(3, y);
+      back.delay = Math.round(d / C_SON * 10000) / 10;
+      back.invert = true;
+      return [back, front];
+    }
+  }
+};
+
+/* ---------- couleur ---------- */
+
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+function jet(t) {
+  t = clamp(t, 0, 1);
+  return [
+    Math.round(255 * clamp(1.5 - Math.abs(4 * t - 3), 0, 1)),
+    Math.round(255 * clamp(1.5 - Math.abs(4 * t - 2), 0, 1)),
+    Math.round(255 * clamp(1.5 - Math.abs(4 * t - 1), 0, 1)),
+  ];
+}
+
+/* ---------- physique ---------- */
+
+function splAt(mx, my) {
+  const omega = 2 * Math.PI * state.freq;
+  const k = omega / C_SON;
+  let re = 0, im = 0, actives = 0;
+  for (const s of state.sources) {
+    if (s.mute) continue;
+    actives++;
+    const r = Math.max(Math.hypot(mx - s.x, my - s.y), R_MIN);
+    const ph = -(k * r + omega * s.delay / 1000)
+             + s.phase * Math.PI / 180
+             + (s.invert ? Math.PI : 0);
+    const a = 1 / r;
+    re += a * Math.cos(ph);
+    im += a * Math.sin(ph);
+  }
+  if (!actives) return -Infinity;
+  return 20 * Math.log10(Math.hypot(re, im) + 1e-12);
+}
+
+/* ---------- dimensionnement responsive du canvas ---------- */
+
+function pxPerM() { return view.width / state.W; }  // aspect canvas = aspect grille
+
+function layoutCanvas() {
+  const wrap = view.parentElement;
+  const avail = wrap.clientWidth - 20;               // padding du wrap
+  const cssW = Math.max(240, Math.min(avail, MAX_CSS_W));
+  const cssH = cssW * state.H / state.W;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.style.width = cssW + "px";
+  view.style.height = cssH + "px";
+  view.width = Math.round(cssW * dpr);
+  view.height = Math.round(cssH * dpr);
+}
+
+/* ---------- rendu ---------- */
+
+let needsDraw = false;
+function requestDraw() {
+  if (needsDraw) return;
+  needsDraw = true;
+  requestAnimationFrame(() => { needsDraw = false; draw(); });
+}
+
+function draw() {
+  const scale = pxPerM();
+  const pw = view.width, ph = view.height;
+
+  // champ calculé en basse résolution puis étiré (lissage navigateur)
+  const cw = Math.max(1, Math.ceil(pw / CELL)), ch = Math.max(1, Math.ceil(ph / CELL));
+  off.width = cw; off.height = ch;
+  const img = offCtx.createImageData(cw, ch);
+  const data = img.data;
+  const mPerCell = state.W / cw;
+  let p = 0;
+  for (let j = 0; j < ch; j++) {
+    const my = (j + 0.5) * (state.H / ch);
+    for (let i = 0; i < cw; i++) {
+      const spl = splAt((i + 0.5) * mPerCell, my);
+      const [r, g, b] = jet((spl - DB_MIN) / (DB_MAX - DB_MIN));
+      data[p++] = r; data[p++] = g; data[p++] = b; data[p++] = 255;
+    }
+  }
+  offCtx.putImageData(img, 0, 0);
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(off, 0, 0, pw, ph);
+
+  // quadrillage tous les 5 m
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 5; x < state.W; x += 5) { ctx.moveTo(x * scale, 0); ctx.lineTo(x * scale, ph); }
+  for (let y = 5; y < state.H; y += 5) { ctx.moveTo(0, y * scale); ctx.lineTo(pw, y * scale); }
+  ctx.stroke();
+
+  // caissons
+  const sz = clamp(view.width * 0.022, 16, 30);
+  state.sources.forEach((s, i) => {
+    const x = s.x * scale, y = s.y * scale;
+    ctx.fillStyle = s.mute ? "#9aa0a6" : "#cc2222";
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.fillRect(x - sz / 2, y - sz / 2, sz, sz);
+    ctx.strokeRect(x - sz / 2, y - sz / 2, sz, sz);
+    if (i === state.selected) {
+      ctx.strokeStyle = "#1c1e21";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x - sz / 2 - 3, y - sz / 2 - 3, sz + 6, sz + 6);
+    }
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold " + Math.round(sz * 0.5) + "px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(i + 1), x, y + 0.5);
+    if (s.invert) {
+      ctx.fillStyle = "#1c1e21";
+      ctx.font = "bold " + Math.round(sz * 0.6) + "px sans-serif";
+      ctx.fillText("Ø", x, y - sz / 2 - sz * 0.5);
+    }
+  });
+}
+
+function drawLegend() {
+  const lc = document.getElementById("legendBar");
+  const g = lc.getContext("2d");
+  for (let i = 0; i < lc.width; i++) {
+    const [r, gr, b] = jet(i / (lc.width - 1));
+    g.fillStyle = `rgb(${r},${gr},${b})`;
+    g.fillRect(i, 0, 1, lc.height);
+  }
+  document.getElementById("dbMin").textContent = DB_MIN + " dB";
+  document.getElementById("dbMax").textContent = "+" + DB_MAX + " dB";
+}
+
+/* ---------- panneau sources ---------- */
+
+function renderPanel() {
+  document.getElementById("srcCount").textContent =
+    state.sources.length + " caisson" + (state.sources.length > 1 ? "s" : "");
+  const tbody = document.getElementById("srcRows");
+  tbody.innerHTML = "";
+  state.sources.forEach((s, i) => {
+    const tr = document.createElement("tr");
+    tr.className = "src" + (i === state.selected ? " sel" : "");
+    tr.addEventListener("click", () => { state.selected = i; renderPanel(); requestDraw(); });
+
+    const tdN = document.createElement("td");
+    const tag = document.createElement("span");
+    tag.className = "tag"; tag.textContent = i + 1;
+    tdN.appendChild(tag);
+
+    const tdPos = document.createElement("td");
+    tdPos.textContent = s.x.toFixed(1) + " / " + s.y.toFixed(1);
+    tdPos.style.color = "var(--muted)";
+
+    const tdDelay = document.createElement("td");
+    const inD = document.createElement("input");
+    inD.type = "number"; inD.min = 0; inD.max = 50; inD.step = 0.1; inD.value = s.delay;
+    inD.inputMode = "decimal";
+    inD.addEventListener("input", () => { s.delay = clamp(parseFloat(inD.value) || 0, 0, 50); requestDraw(); });
+    inD.addEventListener("click", e => e.stopPropagation());
+    tdDelay.appendChild(inD);
+
+    const tdPhase = document.createElement("td");
+    const inP = document.createElement("input");
+    inP.type = "number"; inP.min = 0; inP.max = 359; inP.step = 5; inP.value = s.phase;
+    inP.inputMode = "numeric";
+    inP.addEventListener("input", () => { s.phase = clamp(parseFloat(inP.value) || 0, 0, 359); requestDraw(); });
+    inP.addEventListener("click", e => e.stopPropagation());
+    tdPhase.appendChild(inP);
+
+    const tdBtn = document.createElement("td");
+    const bInv = document.createElement("button");
+    bInv.className = "toggle" + (s.invert ? " on" : "");
+    bInv.textContent = "Ø";
+    bInv.title = "Inversion de polarité (+180°)";
+    bInv.addEventListener("click", e => { e.stopPropagation(); s.invert = !s.invert; renderPanel(); requestDraw(); });
+    const bMute = document.createElement("button");
+    bMute.className = "toggle" + (s.mute ? " on" : "");
+    bMute.textContent = "M";
+    bMute.title = "Couper ce caisson";
+    bMute.addEventListener("click", e => { e.stopPropagation(); s.mute = !s.mute; renderPanel(); requestDraw(); });
+    tdBtn.appendChild(bInv);
+    tdBtn.appendChild(document.createTextNode(" "));
+    tdBtn.appendChild(bMute);
+
+    tr.append(tdN, tdPos, tdDelay, tdPhase, tdBtn);
+    tbody.appendChild(tr);
+  });
+}
+
+/* ---------- interactions carte (souris + tactile) ---------- */
+
+let dragIdx = -1;
+
+function clientToM(clientX, clientY) {
+  const rect = view.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left) / rect.width * state.W,
+    y: (clientY - rect.top) / rect.height * state.H,
+  };
+}
+
+function pickSource(m) {
+  const grabR = Math.max(1.0, state.W * 0.045);   // rayon de préhension en mètres (généreux pour le tactile)
+  let best = -1, bestD = Infinity;
+  state.sources.forEach((s, i) => {
+    const d = Math.hypot(m.x - s.x, m.y - s.y);
+    if (d < grabR && d < bestD) { best = i; bestD = d; }
+  });
+  return best;
+}
+
+function startDrag(clientX, clientY) {
+  const idx = pickSource(clientToM(clientX, clientY));
+  if (idx >= 0) {
+    dragIdx = idx;
+    state.selected = idx;
+    view.classList.add("dragging");
+    renderPanel();
+    requestDraw();
+  }
+  return idx >= 0;
+}
+
+function moveDrag(clientX, clientY) {
+  if (dragIdx < 0) return;
+  const m = clientToM(clientX, clientY);
+  const s = state.sources[dragIdx];
+  s.x = clamp(m.x, 0.3, state.W - 0.3);
+  s.y = clamp(m.y, 0.3, state.H - 0.3);
+  renderPanel();
+  requestDraw();
+}
+
+function endDrag() {
+  dragIdx = -1;
+  view.classList.remove("dragging");
+}
+
+// souris
+view.addEventListener("mousedown", e => startDrag(e.clientX, e.clientY));
+window.addEventListener("mousemove", e => moveDrag(e.clientX, e.clientY));
+window.addEventListener("mouseup", endDrag);
+
+// sonde au survol (souris uniquement)
+view.addEventListener("mousemove", e => {
+  if (dragIdx >= 0) return;
+  const m = clientToM(e.clientX, e.clientY);
+  if (m.x < 0 || m.y < 0 || m.x > state.W || m.y > state.H) return;
+  const spl = splAt(m.x, m.y);
+  document.getElementById("probe").textContent =
+    "x " + m.x.toFixed(1) + " m, y " + m.y.toFixed(1) + " m : " +
+    (isFinite(spl) ? spl.toFixed(1) + " dB (rel.)" : "silence");
+});
+
+// tactile
+view.addEventListener("touchstart", e => {
+  const t = e.touches[0];
+  if (startDrag(t.clientX, t.clientY)) e.preventDefault();
+  else {
+    // simple tap : afficher le niveau au point touché
+    const m = clientToM(t.clientX, t.clientY);
+    const spl = splAt(m.x, m.y);
+    document.getElementById("probe").textContent =
+      "x " + m.x.toFixed(1) + " m, y " + m.y.toFixed(1) + " m : " +
+      (isFinite(spl) ? spl.toFixed(1) + " dB (rel.)" : "silence");
+  }
+}, { passive: false });
+
+view.addEventListener("touchmove", e => {
+  if (dragIdx >= 0) {
+    e.preventDefault();
+    moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+  }
+}, { passive: false });
+
+view.addEventListener("touchend", endDrag);
+view.addEventListener("touchcancel", endDrag);
+
+/* ---------- contrôles ---------- */
+
+function updateFreqInfo() {
+  document.getElementById("freqVal").textContent = state.freq + " Hz";
+  const lambda = C_SON / state.freq;
+  document.getElementById("lambdaInfo").textContent =
+    "Longueur d'onde λ = " + lambda.toFixed(2) + " m. Les annulations apparaissent quand les trajets diffèrent d'une demi-longueur d'onde (" + (lambda / 2).toFixed(2) + " m).";
+}
+
+document.getElementById("freq").addEventListener("input", e => {
+  state.freq = parseInt(e.target.value, 10);
+  updateFreqInfo();
+  requestDraw();
+});
+
+document.getElementById("gw").addEventListener("change", e => {
+  state.W = clamp(parseFloat(e.target.value) || 30, 10, 80);
+  e.target.value = state.W;
+  state.sources.forEach(s => { s.x = clamp(s.x, 0.3, state.W - 0.3); });
+  layoutCanvas(); renderPanel(); requestDraw();
+});
+document.getElementById("gh").addEventListener("change", e => {
+  state.H = clamp(parseFloat(e.target.value) || 20, 8, 60);
+  e.target.value = state.H;
+  state.sources.forEach(s => { s.y = clamp(s.y, 0.3, state.H - 0.3); });
+  layoutCanvas(); renderPanel(); requestDraw();
+});
+
+document.getElementById("addSrc").addEventListener("click", () => {
+  if (state.sources.length >= 8) return;
+  const y = 2 + (state.sources.length * 2.2) % (state.H - 4);
+  state.sources.push(newSource(3, y));
+  state.selected = state.sources.length - 1;
+  renderPanel(); requestDraw();
+});
+
+document.getElementById("delSrc").addEventListener("click", () => {
+  if (state.sources.length <= 1) return;
+  state.sources.pop();
+  state.selected = Math.min(state.selected, state.sources.length - 1);
+  renderPanel(); requestDraw();
+});
+
+document.querySelectorAll("[data-preset]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const p = PRESETS[btn.dataset.preset];
+    state.sources = p.build(state.W, state.H);
+    state.selected = 0;
+    document.getElementById("presetInfo").textContent = p.info;
+    renderPanel(); requestDraw();
+  });
+});
+
+// relayout à la rotation / redimensionnement
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { layoutCanvas(); requestDraw(); }, 120);
+});
+
+/* ---------- init ---------- */
+
+state.sources = PRESETS.deux.build(state.W, state.H);
+updateFreqInfo();
+drawLegend();
+renderPanel();
+layoutCanvas();
+draw();
+</script>
+</body>
+</html>
